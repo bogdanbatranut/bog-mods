@@ -147,7 +147,7 @@ export const register: Register = on => {
           <Text dimColor>{ICON} token-meter: </Text>
           <Text color={PROMPT_COLOR}>[prompt:{fmt(p)}]</Text>
           <Text color={isMillions ? MILLION_COLOR : TOTAL_COLOR} bold={isMillions}>
-            [total:{fmt(t)}]
+            [total from last clear:{fmt(t)}]
           </Text>
           <Text color={ctxColor(cp)} bold={cp >= 80}>
             {' '}
