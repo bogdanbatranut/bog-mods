@@ -1,0 +1,7 @@
+{
+  "name": "bog-mods",
+  "owner": { "name": "bogdanbatranut" },
+  "plugins": [
+    { "name": "token-meter", "source": "./token-meter" }
+  ]
+}

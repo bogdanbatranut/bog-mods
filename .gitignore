@@ -1,0 +1,14 @@
+# IntelliJ project files — personal, not part of the mod
+.idea/
+
+# macOS
+.DS_Store
+
+# node deps (if a mod ever adds them)
+node_modules/
+
+# engine-generated editor types (written on load, per build)
+**/.claude-plugin/types/
+
+# logs / debug
+*.log
