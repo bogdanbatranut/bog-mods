@@ -6,7 +6,7 @@ is burning, how many you've spent this session, and how full the context window
 is.
 
 ```
-◆ token-meter: [prompt:   2.8k][total:  1.1M] [ctx:  63% 126k/200k] [claude-opus-4-8 · high]
+◆ token-meter: [prompt:   2.8k][total from last clear:  1.1M] [ctx:  63% 126k/200k] [claude-opus-4-8 · high]
 ```
 
 ## What it shows
@@ -16,7 +16,7 @@ The band is a single row with four segments, left to right:
 | Segment | Example | Meaning | Color |
 | --- | --- | --- | --- |
 | `[prompt: …]` | `2.8k` | Tokens used by the **current / last prompt** (this turn). Resets to 0 when a new turn starts. | teal |
-| `[total: …]` | `1.1M` | **Cumulative** tokens since the session started (or since the last `/clear`). | amber — turns **red + bold** once it crosses ~1M |
+| `[total from last clear: …]` | `1.1M` | **Cumulative** tokens since the session started (or since the last `/clear`). | amber — turns **red + bold** once it crosses ~1M |
 | `[ctx: …]` | `63% 126k/200k` | **Live context-window fill**: percent used, then `used / window`. Shows `—` until the first model response. | green `<50%` → amber `50–79%` → red (bold) `≥80%` |
 | `[model · effort]` | `claude-opus-4-8 · high` | The active model and reasoning effort. The `eu.anthropic.` region prefix is stripped. | dim |
 
