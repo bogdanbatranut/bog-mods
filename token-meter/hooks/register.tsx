@@ -70,6 +70,18 @@ const syncContext = async ($: EngineInterface) => {
   await syncCost($, cost?.usd)
 }
 
+// one spelling for every form a model is named in: "eu.anthropic.claude-opus-5-5[1m]",
+// "Opus 5.5" and "claude-opus-5-5-20260101" all become "opus-5-5"
+const normModel = (id: string) =>
+  id
+    .toLowerCase()
+    .replace(/\[.*?\]/g, '')
+    .replace(/^[a-z]+\.anthropic\./, '')
+    .replace(/^claude[-\s]/, '')
+    .trim()
+    .replace(/[\s.]+/g, '-')
+    .replace(/-\d{8}$/, '')
+
 // show model + effort before the first prompt; the first turn.step then replaces
 // the effort with the one the request actually used
 const seedEffort = async ($: EngineInterface, current: string) => {
@@ -77,7 +89,13 @@ const seedEffort = async ($: EngineInterface, current: string) => {
     effortLevel?: string
     modelSettings?: Record<string, { effortLevel?: string }>
   }
-  const key = Object.keys(s.modelSettings ?? {}).find(k => current.includes(k))
+  // $.session.model() answers as /model shows it ("Opus 5.5", "opus", an id
+  // with "[1m]"), while modelSettings is keyed by id ("claude-opus-5-5")
+  const cur = normModel(current)
+  const key = Object.keys(s.modelSettings ?? {}).find(k => {
+    const nk = normModel(k)
+    return nk === cur || cur.startsWith(`${nk}-`) || nk.startsWith(`${cur}-`)
+  })
   return (key && s.modelSettings?.[key]?.effortLevel) || s.effortLevel || ''
 }
 
@@ -123,6 +141,7 @@ export const register: Register = on => {
     await syncModel($)
     const current = await $.session.model()
     lastSaved = current ? await seedEffort($, current) : ''
+    debug($, `session.start model="${current}" seeded effort="${lastSaved}"`)
     startSettingsPoll($)
     // a resumed session starts with the ledger already running
     await syncCost($, (await $.session.usage()).cost?.usd)
