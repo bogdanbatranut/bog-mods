@@ -10,6 +10,9 @@ declare module 'claude-code' {
       ctxPercent: number
       model: string
       effort: string
+      ledger: number
+      clearBase: number
+      turnBase: number
     }
   }
 }

@@ -10,10 +10,17 @@ const ctxPercent = atom({ plugin: 'token-meter', key: 'ctxPercent' } as const, 0
 const model = atom({ plugin: 'token-meter', key: 'model' } as const, '')
 const effort = atom({ plugin: 'token-meter', key: 'effort' } as const, '')
 
+// the host's cost ledger in USD (-1 where it keeps none, which hides the
+// segment), and where it stood at the last /clear and at the current turn's start
+const ledger = atom({ plugin: 'token-meter', key: 'ledger' } as const, -1)
+const clearBase = atom({ plugin: 'token-meter', key: 'clearBase' } as const, 0)
+const turnBase = atom({ plugin: 'token-meter', key: 'turnBase' } as const, 0)
+
 const ICON = '◆'
 const PROMPT_COLOR = '#0e7490'
 const TOTAL_COLOR = '#92400e'
 const MILLION_COLOR = '#b91c1c'
+const COST_COLOR = '#6d28d9'
 
 // context-fill colors by percentage: calm → warming → full
 const CTX_LOW = '#15803d'
@@ -41,13 +48,26 @@ const shortModel = (id: string) => {
   return m ? `${m[1]}-${m[2]}.${m[3]}` : bare
 }
 
+// "$0.42", "$12.35"; a nonzero amount under half a cent shows as "<$0.01"
+const fmtUsd = (usd: number) => (usd > 0 && usd < 0.005 ? '<$0.01' : `$${usd.toFixed(2)}`)
+
+// take the ledger's new reading; one below a baseline means the host reset it
+// (e.g. on /clear), so count that baseline from 0
+const syncCost = async ($: EngineInterface, usd: number | undefined) => {
+  if (usd === undefined) return
+  await update($, clearBase, b => (usd < b ? 0 : b))
+  await update($, turnBase, b => (usd < b ? 0 : b))
+  await update($, ledger, () => usd)
+}
+
 // pull the live context-window fill from $.session.usage() into the atoms;
 // `tokens`/`percent` are absent until the first response of a fresh/compacted window
 const syncContext = async ($: EngineInterface) => {
-  const { context } = await $.session.usage()
+  const { context, cost } = await $.session.usage()
   await update($, ctxWindow, () => context.window ?? 0)
   await update($, ctxTokens, () => context.tokens ?? 0)
   await update($, ctxPercent, () => context.percent ?? 0)
+  await syncCost($, cost?.usd)
 }
 
 // show model + effort before the first prompt; the first turn.step then replaces
@@ -104,6 +124,8 @@ export const register: Register = on => {
     const current = await $.session.model()
     lastSaved = current ? await seedEffort($, current) : ''
     startSettingsPoll($)
+    // a resumed session starts with the ledger already running
+    await syncCost($, (await $.session.usage()).cost?.usd)
     return next(e)
   })
 
@@ -127,6 +149,8 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     $.ui.status(undefined)
     await update($, prompt, () => 0)
+    const l = await read($, ledger)
+    await update($, turnBase, () => Math.max(l, 0))
     return next(e)
   })
 
@@ -157,6 +181,7 @@ export const register: Register = on => {
       await update($, ctxTokens, () => e.context.tokens ?? 0)
       await update($, ctxPercent, () => e.context.percent ?? 0)
     }
+    if (e.changed.includes('cost')) await syncCost($, e.cost?.usd)
     return next(e)
   })
 
@@ -165,6 +190,10 @@ export const register: Register = on => {
     await update($, total, () => 0)
     await update($, ctxTokens, () => 0)
     await update($, ctxPercent, () => 0)
+    // the ledger may run on across /clear: count cost from where it stands now
+    const l = Math.max(await read($, ledger), 0)
+    await update($, clearBase, () => l)
+    await update($, turnBase, () => l)
     // /clear keeps the process alive and fires no session.start after it, so keep model + effort
     if (e.reason === 'clear') await syncModel($)
     else {
@@ -182,6 +211,9 @@ export const register: Register = on => {
     const ct = await read($, ctxTokens)
     const cw = await read($, ctxWindow)
     const cp = await read($, ctxPercent)
+    const usd = await read($, ledger)
+    const clearUsd = usd - (await read($, clearBase))
+    const promptUsd = usd - (await read($, turnBase))
     // /clear can wipe the atoms after session.end ran, so re-seed whenever the model is missing
     // read-only: render may not write state
     let cur = await read($, model)
@@ -207,6 +239,12 @@ export const register: Register = on => {
             {' '}
             [ctx:{cw > 0 ? ` ${cp}% ${fmtTight(ct)}/${fmtTight(cw)}` : ' —'}]
           </Text>
+          {usd >= 0 && (
+            <Text color={COST_COLOR}>
+              {' '}
+              [cost: {fmtUsd(promptUsd)} / {fmtUsd(clearUsd)}]
+            </Text>
+          )}
           {m && <Text dimColor> [{ef ? `${m} · ${ef}` : m}]</Text>}
         </Box>
         {below}

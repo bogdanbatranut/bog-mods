@@ -3,21 +3,22 @@
 A Claude Code mod that pins a compact token band directly **above the prompt**,
 so you can see — at a glance, in real time — how many tokens the current prompt
 is burning, how many you've spent this session, and how full the context window
-is.
+is, and what it has cost in dollars.
 
 ```
-◆ [prompt:   2.8k][total from last clear:  1.1M] [ctx:  63% 126k/200k] [opus-4.8 · high]
+◆ [prompt:   2.8k][total from last clear:  1.1M] [ctx:  63% 126k/200k] [cost: $0.18 / $4.27] [opus-4.8 · high]
 ```
 
 ## What it shows
 
-The band is a single row with four segments, left to right:
+The band is a single row with five segments, left to right:
 
 | Segment | Example | Meaning | Color |
 | --- | --- | --- | --- |
 | `[prompt: …]` | `2.8k` | Tokens used by the **current / last prompt** (this turn). Resets to 0 when a new turn starts. | teal |
 | `[total from last clear: …]` | `1.1M` | **Cumulative** tokens since the session started (or since the last `/clear`). | amber — turns **red + bold** once it crosses ~1M |
 | `[ctx: …]` | `63% 126k/200k` | **Live context-window fill**: percent used, then `used / window`. Shows `—` until the first model response. | green `<50%` → amber `50–79%` → red (bold) `≥80%` |
+| `[cost: … / …]` | `$0.18 / $4.27` | **Dollar cost** of the current / last prompt, then of everything since the session started (or since the last `/clear`). Hidden where the host keeps no cost ledger. | violet |
 | `[model · effort]` | `opus-4.8 · high` | The active model and reasoning effort, shown compactly: the `<region>.anthropic.` prefix and `claude-` are dropped and the version is dotted (`claude-opus-4-8` → `opus-4.8`). | dim |
 
 ### How the numbers are counted
@@ -25,6 +26,7 @@ The band is a single row with four segments, left to right:
 - **prompt** and **total** both add up, per model step, `input + output + cache-creation` tokens. **Cache reads are excluded** on purpose — the whole context is re-read every step, so counting it would swamp the signal. `prompt` is the running sum for the current turn; `total` is the running sum for the whole session.
 - **ctx** is read from the engine's own live context usage after every step and on compaction, so it tracks the window shrinking (e.g. after `/clear` or auto-compaction), not just growing.
 - Numbers are shown with one decimal and a `k` / `M` suffix (`999.9k` rolls over to `1.0M`).
+- **cost** comes from the engine's own cost ledger, the same total `/cost` and the status line show, priced by the host (cache reads included, since they are billed). The prompt figure is how much the ledger grew since the turn started; the total is how much it grew since the last `/clear`. Amounts show with two decimals; a nonzero amount under half a cent shows as `<$0.01`.
 
 ## Install
 
