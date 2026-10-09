@@ -29,6 +29,18 @@ const fmt = (n: number) =>
 const fmtTight = (n: number) =>
   n >= 999_950 ? `${(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}k`
 
+// collapse a model id to a compact label for narrow terminals:
+// "eu.anthropic.claude-opus-4-8" → "opus-4.8"; any region prefix and trailing
+// date stamp are dropped. Unrecognised shapes fall back to the bare id.
+const shortModel = (id: string) => {
+  const bare = id
+    .replace(/^[a-z]+\.anthropic\./, '') // strip "<region>.anthropic." prefix
+    .replace(/^claude-/, '') //            strip the "claude-" family prefix
+  // family + major.minor, e.g. "opus-4-8" → "opus-4.8" (ignore any -YYYYMMDD)
+  const m = bare.match(/^([a-z]+)-(\d+)-(\d+)/)
+  return m ? `${m[1]}-${m[2]}.${m[3]}` : bare
+}
+
 // pull the live context-window fill from $.session.usage() into the atoms;
 // `tokens`/`percent` are absent until the first response of a fresh/compacted window
 const syncContext = async ($: EngineInterface) => {
@@ -57,17 +69,57 @@ const syncModel = async ($: EngineInterface) => {
   if (seeded) await update($, effort, () => seeded)
 }
 
+// temporary: toasts which effort-change paths the mod can actually see
+const DEBUG = true
+const debug = ($: EngineInterface, text: string) => {
+  if (DEBUG) $.ui.toast(`token-meter debug: ${text}`)
+}
+
+const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+// no event fires when effort changes from a picker or the desktop dropdown, so
+// poll the saved effort and take it only when it moves — between polls the
+// value turn.step reported stays on screen
+const SETTINGS_POLL_MS = 1500
+let lastSaved = ''
+let poll: { cancel: () => void } | undefined
+const startSettingsPoll = ($: EngineInterface) => {
+  poll?.cancel()
+  poll = $.clock.every(SETTINGS_POLL_MS, async () => {
+    const current = await $.session.model()
+    if (!current) return
+    const saved = await seedEffort($, current)
+    if (saved === lastSaved) return
+    lastSaved = saved
+    debug($, `saved effort changed → ${saved || '(none)'}`)
+    if (saved) await update($, effort, () => saved)
+  })
+}
+
 export const register: Register = on => {
   // clears the pinned status line the 0.1.0 version left under the prompt
   on('session.start', async ($, e, next) => {
     $.ui.status(undefined)
     await syncModel($)
+    const current = await $.session.model()
+    lastSaved = current ? await seedEffort($, current) : ''
+    startSettingsPoll($)
     return next(e)
   })
 
   // /model and /effort before any turn: no turn.step has run yet, so refresh here
   on('command.run', async ($, e, next) => {
     const r = await next(e)
+    debug($, `command.run /${e.command}${e.args ? ` ${e.args}` : ''}`)
+    if (e.command === 'effort') {
+      // "/effort high" names the level outright: show it without waiting for
+      // settings (a session-only level may never be saved there)
+      const level = e.args.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
+      if (LEVELS.includes(level)) {
+        await update($, effort, () => level)
+        return r
+      }
+    }
     if (e.command === 'model' || e.command === 'effort') await syncModel($)
     return r
   })
@@ -116,6 +168,8 @@ export const register: Register = on => {
     // /clear keeps the process alive and fires no session.start after it, so keep model + effort
     if (e.reason === 'clear') await syncModel($)
     else {
+      poll?.cancel()
+      poll = undefined
       await update($, model, () => '')
       await update($, effort, () => '')
     }
@@ -136,7 +190,7 @@ export const register: Register = on => {
       cur = (await $.session.model()) ?? ''
       if (cur && !ef) ef = await seedEffort($, cur)
     }
-    const m = cur.replace(/^eu\.anthropic\./, '')
+    const m = shortModel(cur)
     const { Box, Text } = $.ui.resolve(e)
     const isMillions = t >= 999_950
     const below = await next(e)
@@ -144,7 +198,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Box>
-          <Text dimColor>{ICON} token-meter: </Text>
+          <Text dimColor>{ICON} </Text>
           <Text color={PROMPT_COLOR}>[prompt:{fmt(p)}]</Text>
           <Text color={isMillions ? MILLION_COLOR : TOTAL_COLOR} bold={isMillions}>
             [total from last clear:{fmt(t)}]
