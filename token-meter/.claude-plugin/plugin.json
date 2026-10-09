@@ -1,1 +1,1 @@
-{ "name": "token-meter", "version": "0.3.3", "description": "Band above the prompt: tokens used by the last prompt, since /clear, and the live context-window fill", "types": "./types/index.d.ts" }
+{ "name": "token-meter", "version": "0.4.0", "description": "Band above the prompt: tokens used by the last prompt, since /clear, the live context-window fill, and the dollar cost", "types": "./types/index.d.ts" }
